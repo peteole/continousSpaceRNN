@@ -1,11 +1,11 @@
-# Using function as network input
+# Continuous space RNNs
 ## High level idea
-When humans want to extract a piece of information from an image they normally do not process it in a single run like neural networks. Instead they first get a quick overview, find a promising region, have a closer look at that region, then maybe again take a look at the higher level context of the detail they just saw, find another intersting region and continue like this until they found the information they need.
+When humans want to extract a piece of information from an image they normally do not process it in a single run like neural networks. Instead they first get a quick overview, find a promising region, have a closer look at that region, then maybe again take a look at the higher level context of the detail they just saw, find another interesting region and continue like this until they found the information they need.
 
 Here I propose a way to mimic this behavior for neural networks.
-The input data is modeled as a continous function $f$. For instance in case of an image $i$ the function $f_i$ maps a coordinate $(x,y)$ to a tuple of color values in $i$ by interpolating the raw image. Here $x$ and $y$ can be in the range $(0,1)$.
+The input data is modeled as a continuous function $f$. For instance in case of an image $i$ the function $f_i$ maps a coordinate $(x,y)$ to a tuple of color values in $i$ by interpolating the raw image. Here $x$ and $y$ can be in the range $(0,1)$.
 
-The neural network will now act similar to a Recurrent Neural Network. In the first stage, a recurrent block is linked with itself many times. The Recurrent block gets as input the last state $s_j$ and a section of the image $u$. Its output is the next state $s_{j+1}$ and the desired location for the next image part $l$ it wants to look at. $l=(x,y,c)$ is a tuple of a (continous) coordinate $(x,y)$ and a scale $c$. $u$ is the pointwise evaluation of $f$ in a grid (with a fixed number of points) that is positioned according to the image section described by $l$.
+The neural network will now act similar to a Recurrent Neural Network. In the first stage, a recurrent block is linked with itself many times. The Recurrent block gets as input the last state $s_j$ and a section of the image $u$. Its output is the next state $s_{j+1}$ and the desired location for the next image part $l$ it wants to look at. $l=(x,y,c)$ is a tuple of a (continuous) coordinate $(x,y)$ and a scale $c$. $u$ is the pointwise evaluation of $f$ in a grid (with a fixed number of points) that is positioned according to the image section described by $l$.
 
 The second stage will be a neural network that maps the last state $s_n$ to some output, for instance a classification, just like in regular RNNs.
 
@@ -39,7 +39,7 @@ class RecurrentCell:
         return (next_location,(h1,c1))
 
 
-class ContinousSpaceRNN:
+class ContinuousSpaceRNN:
     def init(self,preprocessor:NeuralNetwork,output_nn:NeuralNetwork, num_iterations:int, lstm_units=20, image_section_shape=(12,10)):
         self.recurrent_cell=RecurrentCell(preprocessor,lstm_units)
         self.output_nn=output_nn
@@ -80,7 +80,7 @@ let output_nn=Sequential(
     Linear(input_size=10,output_size=NUM_CLASSES),
     Softmax(),
 )
-let rnn=ContinousSpaceRNN(preprocessor,output_nn,num_iterations=10,lstm_units=LSTM_SIZE,image_section_shape=(SECTION_WIDTH,SECTION_HEIGHT))
+let rnn=ContinuousSpaceRNN(preprocessor,output_nn,num_iterations=10,lstm_units=LSTM_SIZE,image_section_shape=(SECTION_WIDTH,SECTION_HEIGHT))
 # shape: 1920x1080x3
 let image=array(load_image("data/cat.jpg"))
 # shape: 1xNUM_CLASSES
