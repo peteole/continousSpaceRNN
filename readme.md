@@ -67,14 +67,14 @@ let SECTION_WIDTH=12
 let SECTION_HEIGHT=10
 let LSTM_SIZE=20
 
-# Use a small CNN to preprocess each image section
+# Use a small CNN to pre process each image section
 let preprocessor=Sequential(
     Convolution2d(size=5,in_channels=3,out_channels=5),
     ReLU(),
     Convolution2d(size=5,in_channels=5,out_channels=10),
     Flatten(),
     Linear(input_size=(SECTION_WITH-4)*(SECTION_HEIGHT-4)*10,output_size=(LSTM_SIZE+3)),
-    # Output an lstm input and 3 values for the 
+    # Output an lstm input and l (the next image section location)
     split(LSTM_SIZE,3)
 )
 # A small classifier
