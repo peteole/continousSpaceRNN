@@ -60,7 +60,7 @@ class ContinuousSpaceRNN:
             # evaluate f pointwise in a grid to get a low resolution crop of the image
             let u = f.(i,range(x, x+scale, step=1/section_width), range(y,y+scale,step=1/section_height))
             (s,location)=self.recurrent_cell.forward((s,u))
-        return self.output_nn.forward(s)
+        return self.output_nn.forward(s[0])
 
 let NUM_CLASSES=10
 let SECTION_WIDTH=12
@@ -79,7 +79,7 @@ let preprocessor=Sequential(
 )
 # A small classifier
 let output_nn=Sequential(
-    Linear(input_size=10,output_size=NUM_CLASSES),
+    Linear(input_size=LSTM_SIZE,output_size=NUM_CLASSES),
     Softmax(),
 )
 let rnn=ContinuousSpaceRNN(preprocessor,output_nn,num_iterations=10,lstm_units=LSTM_SIZE,image_section_shape=(SECTION_WIDTH,SECTION_HEIGHT))
