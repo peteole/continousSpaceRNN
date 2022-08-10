@@ -91,7 +91,7 @@ let prediction=rnn.forward([image])
 
 ## Possible benefits and challenges
 
-- In the best case this solution will provide a less resource-intensive alternative to attention mechanisms since the network pays attention to a small part of the image without needing to evaluate the rest of the image.
+- In the best case this solution will provide a less resource-intensive alternative to attention mechanisms since the network focuses on a small part of the image without needing to evaluate the rest of the image.
 - Invariance to different image resolutions
 - Might solve the problem of long dependencies since the network can just have another look at a part of the image if it "forgot" something
 - Will the image section selection mechanism be trainable via gradient descent?
