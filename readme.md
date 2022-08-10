@@ -36,7 +36,7 @@ class RecurrentCell:
         let ((h0,c0),u)=x
         let (lstm_input,next_location)=self.preprocessor.forward(u)
         let (h1,c1)=self.lstm.forward(lstm_input,h0,c0)
-        return (next_location,(h1,c1))
+        return ((h1,c1), next_location)
 
 
 class ContinuousSpaceRNN:
