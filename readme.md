@@ -34,7 +34,7 @@ class RecurrentCell:
 
     def forward(self,x):
         let ((h0,c0),u)=x
-        let (lstm_input,next_location)=self.n.forward(u)
+        let (lstm_input,next_location)=self.preprocessor.forward(u)
         let (h1,c1)=self.lstm.forward(lstm_input,h0,c0)
         return (next_location,(h1,c1))
 
@@ -53,13 +53,13 @@ class ContinuousSpaceRNN:
         # start x=0,y=0,scale=1 <=> full picture
         let location=(0,0,1)
         let (section_width,section_height)=self.image_section_shape
-        # use lstm library from somewhere
+        # s=(h,c)
         let s=LSTM.initial_state(self.lstm_units)
         for _ in range(self.num_iterations):
             let (x,y,scale)=location
-            # evaluate f pointwise in a grid
+            # evaluate f pointwise in a grid to get a low resolution crop of the image
             let u = f.(i,range(x, x+scale, step=1/section_width), range(y,y+scale,step=1/section_height))
-            (location,s)=self.recurrent_cell.forward((s,u))
+            (s,location)=self.recurrent_cell.forward((s,u))
         return self.output_nn.forward(s)
 
 let NUM_CLASSES=10
@@ -73,7 +73,9 @@ let preprocessor=Sequential(
     ReLU(),
     Convolution2d(size=5,in_channels=5,out_channels=10),
     Flatten(),
-    Linear(input_size=(SECTION_WITH-4)*(SECTION_HEIGHT-4)*10,output_size=LSTM_SIZE),
+    Linear(input_size=(SECTION_WITH-4)*(SECTION_HEIGHT-4)*10,output_size=(LSTM_SIZE+3)),
+    # Output an lstm input and 3 values for the 
+    split(LSTM_SIZE,3)
 )
 # A small classifier
 let output_nn=Sequential(
