@@ -34,7 +34,7 @@ class ImageInterpolator(tf.keras.layers.Layer):
         )
         print('queries: ', queries)
         interpolated = tfp.math.batch_interp_regular_nd_grid(
-            queries, [0.0, 0.0], [1.0, 1.0], image, axis=-3)
+            queries, [0.0, 0.0], [1.0, 1.0], image, axis=1)
         return interpolated
 
     def compute_output_shape(self, input_shape):
@@ -73,6 +73,8 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
         print("state_t: ", state_t)
         (last_lstm_states, section_commands) = state_t
         section_values = self.interpolator(image, section_commands)
+        if len(section_values.shape) == 3:
+            section_values = tf.expand_dims(section_values, -1)
         print("section_values: ", section_values)
         processed_section_values = self.section_processor(section_values)
         print("processed_section_values: ", processed_section_values)
