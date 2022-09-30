@@ -41,18 +41,15 @@ class ImageInterpolator(tf.keras.layers.Layer):
         return (* self.grid_dim, input_shape[-1])
 
 
-"""
-Call arguments:
-    image: A 4D tensor of shape (batch_size, height, width, channels)
-    state_t: A tuple of the previous state of the RNN. The first element is the lstm states for all batches and the second element is the sections the network wants us to have a look at in this iteration (for all batches).
-"""
-
 
 class ImageSectionRNNCell(tf.keras.layers.Layer):
     """
     Args:
         grid_dim: The dimension of the grid to interpolate the image to
         units: The number of units in the LSTM cell
+        Call arguments:
+            image: A 4D tensor of shape (batch_size, height, width, channels)
+            state_t: A tuple of the previous state of the RNN. The first element is the lstm states for all batches and the second element is the sections the network wants us to have a look at in this iteration (for all batches).
     """
 
     def __init__(self, grid_dim: Tuple = (16, 16), units=32, **kwargs):
