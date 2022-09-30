@@ -93,3 +93,42 @@ def generate(starts, stops, nums, name="grid_generate"):
         grid._grid(starts, stops, nums)
         for starts, stops in zip(tf.unstack(starts), tf.unstack(stops))
     ])
+
+def generate_2d_grid(starts, ends, nums:Tuple, name="grid_generate"):
+    """Generates a 2D grid, similar to tf.linspace, but 2d.
+
+    Args:
+      starts: A tensor of shape `[B, 2]` containing the start coordinates of the
+        grid.
+      stops: A tensor of shape `[B, 2]` containing the stop coordinates of the
+        grid.
+      nums: A tuple of the form `[w,h]` containing the number of points in each
+        dimension. Must be known at compile time.
+      name: A name for this op that defaults to "grid_generate".
+
+    Returns:
+      A tensor of shape `[B, w, h, 2]` containing the 2D grid. starts and ends are inclusive. The last dimension contains the x and y coordinates of the grid points.
+    """
+    with tf.compat.v1.name_scope(name):
+        # shape (B,2)
+        starts = tf.convert_to_tensor(starts)
+        # shape (B,2)
+        ends = tf.convert_to_tensor(ends)
+        # shape (B,w)
+        w_range=tf.linspace(starts[:,0],ends[:,0],nums[0],axis=1)
+
+        # shape (B,w)
+        second_spacial_dim_start=tf.einsum('i,j->ij',starts[:,1],tf.ones((nums[0],)))
+        # shape (B,w,2)
+        lower_stacked=tf.stack([w_range,second_spacial_dim_start],axis=2)
+        # shape (B,w)
+        second_spacial_dim_end=tf.einsum('i,j->ij',ends[:,1],tf.ones((nums[0],)))
+        # shape (B,w,2)
+        upper_stacked=tf.stack([w_range,second_spacial_dim_end],axis=2)
+        
+        # liat of tensors with shape (B,w,2) of length h
+        ranges=[(1.0-alpha)*lower_stacked+alpha*upper_stacked for alpha in [i/(nums[1]-1) for i in range(nums[1])]]
+        # shape (B,w,h,2)
+        stacked=tf.stack(ranges,axis=2)
+        return stacked
+                
