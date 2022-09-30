@@ -22,11 +22,16 @@ class ImageInterpolator(tf.keras.layers.Layer):
     """
 
     def call(self, image, section):
-        queries = grid.generate(
-            starts=section[:, :2],
-            stops=section[:, :2] + section[:, 2:],
-            nums=self.grid_dim,
-        )
+        starts = section[:, :2],
+        stops = section[:, :2] + section[:, 2:],
+        print(stops)
+        # queries = grid.generate(
+        #     starts=starts,
+        #     stops=stops,
+        #     nums=self.grid_dim,
+        # )
+        queries = generate(starts, stops, self.grid_dim)
+        print('queries: ', queries)
         interpolated = tfp.math.batch_interp_regular_nd_grid(
             queries, [0.0, 0.0], [1.0, 1.0], image, axis=-3)
         return interpolated
@@ -34,17 +39,21 @@ class ImageInterpolator(tf.keras.layers.Layer):
     def compute_output_shape(self, input_shape):
         return (* self.grid_dim, input_shape[-1])
 
+
 """
 Call arguments:
     image: A 4D tensor of shape (batch_size, height, width, channels)
     state_t: A tuple of the previous state of the RNN. The first element is the lstm states for all batches and the second element is the sections the network wants us to have a look at in this iteration (for all batches).
 """
+
+
 class ImageSectionRNNCell(tf.keras.layers.Layer):
     """
     Args:
         grid_dim: The dimension of the grid to interpolate the image to
         units: The number of units in the LSTM cell
     """
+
     def __init__(self, grid_dim: Tuple = (16, 16), units=32, **kwargs):
         super(ImageSectionRNNCell, self).__init__(**kwargs)
         self.grid_dim = grid_dim
@@ -60,6 +69,7 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
             layers.Dense(units, activation='relu'),
             layers.Dense(3, activation='sigmoid')
         ])
+        self.state_size = (self.lstm_cell.state_size, 3)
 
     def call(self, image, state_t):
         (last_lstm_states, section_commands) = state_t
@@ -70,5 +80,16 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
         next_section_command = self.next_section_command_computer(lstm_out)
         return lstm_out, (lstm_states, next_section_command)
 
-    def get_initial_state(self, inputs=None, batch_size=None, dtype=None):
-        return (self.lstm_cell.get_initial_state(inputs, batch_size, dtype), tf.repeat([0.0, 0.0, 1.0], batch_size, axis=0))
+    # def get_initial_state(self, inputs=None, batch_size=None, dtype=None):
+    #     lstm_state=self.lstm_cell.get_initial_state(inputs, batch_size, dtype)
+    #     print("LSTM state: ",lstm_state)
+    #     return (lstm_state, tf.repeat([[0.0, 0.0, 1.0]], batch_size, axis=0))
+
+
+def generate(starts, stops, nums, name="grid_generate"):
+    # if len(starts) == 1:
+    #     return grid._grid(starts, stops, nums)
+    return tf.stack([
+        grid._grid(starts, stops, nums)
+        for starts, stops in zip(tf.unstack(starts), tf.unstack(stops))
+    ])
