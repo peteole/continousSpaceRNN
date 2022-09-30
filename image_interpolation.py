@@ -22,27 +22,51 @@ class ImageInterpolator(tf.keras.layers.Layer):
     """
 
     def call(self, image, section):
-        # if image.shape.ndims ==3:
-        #     image = tf.expand_dims(image, axis=-1)
-        print("image: ",image)
         starts = section[:, :2]
         #print("starts", starts)
         stops = section[:, :2] + section[:, 2:]
-        #print("stops:",stops)
-        queries = generate_2d_grid(
-            starts=starts,
-            stops=stops,
-            nums=self.grid_dim,
-        )
-        print('queries: ', queries)
-        interpolated = tfp.math.batch_interp_regular_nd_grid(
-            queries, [0.0, 0.0], [1.0, 1.0], image, axis=1)
-        print('interpolated: ', interpolated)
-        return interpolated
+        w_range = tf.linspace(starts[:, 0], stops[:, 0], self.grid_dim[0], axis=1)
+
+        # shape (B,w)
+        second_spacial_dim_start = tf.einsum(
+            'i,j->ij', starts[:, 1], tf.ones((self.grid_dim[0],)))
+        # shape (B,w,2)
+        lower_stacked = tf.stack([w_range, second_spacial_dim_start], axis=2)
+        # shape (B,w)
+        second_spacial_dim_end = tf.einsum(
+            'i,j->ij', stops[:, 1], tf.ones((self.grid_dim[0],)))
+        # shape (B,w,2)
+        upper_stacked = tf.stack([w_range, second_spacial_dim_end], axis=2)
+
+        # list of tensors with shape (B,w,2) of length h
+        grid = [(1.0-alpha)*lower_stacked+alpha *
+                upper_stacked for alpha in [i/(self.grid_dim[1]-1) for i in range(self.grid_dim[1])]]
+        interpolations = [tfp.math.batch_interp_regular_nd_grid(
+            line, [0.0, 0.0], [1.0, 1.0], image, axis=1) for line in grid]
+        stacked= tf.stack(interpolations, axis=2)
+        return stacked
+
+    # def call(self, image, section):
+    #     # if image.shape.ndims ==3:
+    #     #     image = tf.expand_dims(image, axis=-1)
+    #     print("image: ",image)
+    #     starts = section[:, :2]
+    #     #print("starts", starts)
+    #     stops = section[:, :2] + section[:, 2:]
+    #     #print("stops:",stops)
+    #     queries = generate_2d_grid(
+    #         starts=starts,
+    #         stops=stops,
+    #         nums=self.grid_dim,
+    #     )
+    #     print('queries: ', queries)
+    #     interpolated = tfp.math.batch_interp_regular_nd_grid(
+    #         queries, [0.0, 0.0], [1.0, 1.0], image, axis=1)
+    #     print('interpolated: ', interpolated)
+    #     return interpolated
 
     def compute_output_shape(self, input_shape):
         return (* self.grid_dim, input_shape[-1])
-
 
 
 class ImageSectionRNNCell(tf.keras.layers.Layer):
@@ -76,9 +100,9 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
         #print("state_t: ", state_t)
         (last_lstm_states, section_commands) = state_t
         section_values = self.interpolator(image, section_commands)
-        if len(section_values.shape) == 3 or section_values.shape[-1] == 1:
-            #section_values = tf.expand_dims(section_values, -1)
-            raise ValueError("section_values has wrong shape")
+        # if len(section_values.shape) == 3 or section_values.shape[-1] == 1:
+        #     #section_values = tf.expand_dims(section_values, -1)
+        #     raise ValueError("section_values has wrong shape")
         #print("section_values: ", section_values)
         processed_section_values = self.section_processor(section_values)
         #print("processed_section_values: ", processed_section_values)
@@ -90,16 +114,17 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
         return lstm_out, (lstm_states, next_section_command)
 
     def get_initial_state(self, inputs=None, batch_size=None, dtype=None):
-        lstm_state=self.lstm_cell.get_initial_state(inputs, batch_size, dtype)
-        print("LSTM state: ",lstm_state)
-        section_state=tf.repeat([[0.0, 0.0, 1.0]], batch_size, axis=0)
-        print("section_state: ",section_state)
+        lstm_state = self.lstm_cell.get_initial_state(
+            inputs, batch_size, dtype)
+        print("LSTM state: ", lstm_state)
+        section_state = tf.repeat([[0.0, 0.0, 1.0]], batch_size, axis=0)
+        print("section_state: ", section_state)
         # stacked= tf.stack([lstm_state, section_state], axis=0)
         # print("stacked: ",stacked)
         return [lstm_state, section_state]
 
 
-def generate_2d_grid(starts, stops, nums:Tuple, name="grid_generate"):
+def generate_2d_grid(starts, stops, nums: Tuple, name="grid_generate"):
     """Generates a 2D grid, similar to tf.linspace, but 2d.
 
     Args:
@@ -120,20 +145,22 @@ def generate_2d_grid(starts, stops, nums:Tuple, name="grid_generate"):
         # shape (B,2)
         stops = tf.convert_to_tensor(stops)
         # shape (B,w)
-        w_range=tf.linspace(starts[:,0],stops[:,0],nums[0],axis=1)
+        w_range = tf.linspace(starts[:, 0], stops[:, 0], nums[0], axis=1)
 
         # shape (B,w)
-        second_spacial_dim_start=tf.einsum('i,j->ij',starts[:,1],tf.ones((nums[0],)))
+        second_spacial_dim_start = tf.einsum(
+            'i,j->ij', starts[:, 1], tf.ones((nums[0],)))
         # shape (B,w,2)
-        lower_stacked=tf.stack([w_range,second_spacial_dim_start],axis=2)
+        lower_stacked = tf.stack([w_range, second_spacial_dim_start], axis=2)
         # shape (B,w)
-        second_spacial_dim_end=tf.einsum('i,j->ij',stops[:,1],tf.ones((nums[0],)))
+        second_spacial_dim_end = tf.einsum(
+            'i,j->ij', stops[:, 1], tf.ones((nums[0],)))
         # shape (B,w,2)
-        upper_stacked=tf.stack([w_range,second_spacial_dim_end],axis=2)
-        
+        upper_stacked = tf.stack([w_range, second_spacial_dim_end], axis=2)
+
         # liat of tensors with shape (B,w,2) of length h
-        ranges=[(1.0-alpha)*lower_stacked+alpha*upper_stacked for alpha in [i/(nums[1]-1) for i in range(nums[1])]]
+        ranges = [(1.0-alpha)*lower_stacked+alpha *
+                  upper_stacked for alpha in [i/(nums[1]-1) for i in range(nums[1])]]
         # shape (B,w,h,2)
-        stacked=tf.stack(ranges,axis=2)
+        stacked = tf.stack(ranges, axis=2)
         return stacked
-                
