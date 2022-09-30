@@ -22,11 +22,13 @@ class ImageInterpolator(tf.keras.layers.Layer):
     """
 
     def call(self, image, section):
+        # if image.shape.ndims ==3:
+        #     image = tf.expand_dims(image, axis=-1)
         print("image: ",image)
         starts = section[:, :2]
-        print("starts", starts)
+        #print("starts", starts)
         stops = section[:, :2] + section[:, 2:]
-        print("stops:",stops)
+        #print("stops:",stops)
         queries = generate_2d_grid(
             starts=starts,
             stops=stops,
@@ -35,6 +37,7 @@ class ImageInterpolator(tf.keras.layers.Layer):
         print('queries: ', queries)
         interpolated = tfp.math.batch_interp_regular_nd_grid(
             queries, [0.0, 0.0], [1.0, 1.0], image, axis=1)
+        print('interpolated: ', interpolated)
         return interpolated
 
     def compute_output_shape(self, input_shape):
@@ -70,25 +73,30 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
         self.state_size = (self.lstm_cell.state_size, 3)
 
     def call(self, image, state_t):
-        print("state_t: ", state_t)
+        #print("state_t: ", state_t)
         (last_lstm_states, section_commands) = state_t
         section_values = self.interpolator(image, section_commands)
-        if len(section_values.shape) == 3:
-            section_values = tf.expand_dims(section_values, -1)
-        print("section_values: ", section_values)
+        if len(section_values.shape) == 3 or section_values.shape[-1] == 1:
+            #section_values = tf.expand_dims(section_values, -1)
+            raise ValueError("section_values has wrong shape")
+        #print("section_values: ", section_values)
         processed_section_values = self.section_processor(section_values)
-        print("processed_section_values: ", processed_section_values)
+        #print("processed_section_values: ", processed_section_values)
         lstm_out, lstm_states = self.lstm_cell(
             processed_section_values, last_lstm_states)
-        print("lstm_out: ", lstm_out)
+        #print("lstm_out: ", lstm_out)
         next_section_command = self.next_section_command_computer(lstm_out)
-        print("next_section_command: ", next_section_command)
+        #print("next_section_command: ", next_section_command)
         return lstm_out, (lstm_states, next_section_command)
 
-    # def get_initial_state(self, inputs=None, batch_size=None, dtype=None):
-    #     lstm_state=self.lstm_cell.get_initial_state(inputs, batch_size, dtype)
-    #     print("LSTM state: ",lstm_state)
-    #     return (lstm_state, tf.repeat([[0.0, 0.0, 1.0]], batch_size, axis=0))
+    def get_initial_state(self, inputs=None, batch_size=None, dtype=None):
+        lstm_state=self.lstm_cell.get_initial_state(inputs, batch_size, dtype)
+        print("LSTM state: ",lstm_state)
+        section_state=tf.repeat([[0.0, 0.0, 1.0]], batch_size, axis=0)
+        print("section_state: ",section_state)
+        # stacked= tf.stack([lstm_state, section_state], axis=0)
+        # print("stacked: ",stacked)
+        return [lstm_state, section_state]
 
 
 def generate_2d_grid(starts, stops, nums:Tuple, name="grid_generate"):
