@@ -26,45 +26,29 @@ class ImageInterpolator(tf.keras.layers.Layer):
         #print("starts", starts)
         stops = section[:, :2] + section[:, 2:]
         w_range = tf.linspace(
-            starts[:, 0], stops[:, 0], self.grid_dim[0], axis=1)
+            starts[:, 0], stops[:, 0], self.grid_dim[0], axis=1, name="batched_x_grid")
 
         # shape (B,w)
         second_spacial_dim_start = tf.einsum(
-            'i,j->ij', starts[:, 1], tf.ones((self.grid_dim[0],)))
+            'i,j->ij', starts[:, 1], tf.ones((self.grid_dim[0],)), name="batched_y_grid_start")
         # shape (B,w,2)
-        lower_stacked = tf.stack([w_range, second_spacial_dim_start], axis=2)
+        lower_stacked = tf.stack(
+            [w_range, second_spacial_dim_start], axis=2, name="batched_lower_edge_stacked")
         # shape (B,w)
         second_spacial_dim_end = tf.einsum(
-            'i,j->ij', stops[:, 1], tf.ones((self.grid_dim[0],)))
+            'i,j->ij', stops[:, 1], tf.ones((self.grid_dim[0],)), name="batched_y_grid_end")
         # shape (B,w,2)
-        upper_stacked = tf.stack([w_range, second_spacial_dim_end], axis=2)
+        upper_stacked = tf.stack(
+            [w_range, second_spacial_dim_end], axis=2, name="batched_upper_edge_stacked")
 
         # list of tensors with shape (B,w,2) of length h
         grid = [(1.0-alpha)*lower_stacked+alpha *
                 upper_stacked for alpha in [i/(self.grid_dim[1]-1) for i in range(self.grid_dim[1])]]
         interpolations = [tfp.math.batch_interp_regular_nd_grid(
-            line, [0.0, 0.0], [1.0, 1.0], image, axis=1) for line in grid]
-        stacked = tf.stack(interpolations, axis=2)
+            line, [0.0, 0.0], [1.0, 1.0], image, axis=1, name='batched_interpolation_line') for line in grid]
+        stacked = tf.stack(interpolations, axis=2,
+                           name="batched_grid_interpolation")
         return stacked
-
-    # def call(self, image, section):
-    #     # if image.shape.ndims ==3:
-    #     #     image = tf.expand_dims(image, axis=-1)
-    #     print("image: ",image)
-    #     starts = section[:, :2]
-    #     #print("starts", starts)
-    #     stops = section[:, :2] + section[:, 2:]
-    #     #print("stops:",stops)
-    #     queries = generate_2d_grid(
-    #         starts=starts,
-    #         stops=stops,
-    #         nums=self.grid_dim,
-    #     )
-    #     print('queries: ', queries)
-    #     interpolated = tfp.math.batch_interp_regular_nd_grid(
-    #         queries, [0.0, 0.0], [1.0, 1.0], image, axis=1)
-    #     print('interpolated: ', interpolated)
-    #     return interpolated
 
     def compute_output_shape(self, input_shape):
         return (* self.grid_dim, input_shape[-1])
@@ -82,6 +66,7 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
 
     def __init__(self, grid_dim: Tuple = (16, 16), units=32, **kwargs):
         super(ImageSectionRNNCell, self).__init__(**kwargs)
+        self.units = units
         self.grid_dim = grid_dim
         self.interpolator = ImageInterpolator(grid_dim=self.grid_dim)
         self.section_processor = tf.keras.Sequential([
@@ -114,54 +99,16 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
         #print("next_section_command: ", next_section_command)
         return lstm_out, (lstm_states, next_section_command)
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "grid_dim": self.grid_dim,
+            "units": self.units,
+        })
+        return config
+
     def get_initial_state(self, inputs=None, batch_size=None, dtype=None):
         lstm_state = self.lstm_cell.get_initial_state(
             inputs, batch_size, dtype)
-        #print("LSTM state: ", lstm_state)
         section_state = tf.repeat([[0.0, 0.0, 1.0]], batch_size, axis=0)
-        #print("section_state: ", section_state)
-        # stacked= tf.stack([lstm_state, section_state], axis=0)
-        # print("stacked: ",stacked)
         return [lstm_state, section_state]
-
-
-def generate_2d_grid(starts, stops, nums: Tuple, name="grid_generate"):
-    """Generates a 2D grid, similar to tf.linspace, but 2d.
-
-    Args:
-      starts: A tensor of shape `[B, 2]` containing the start coordinates of the
-        grid.
-      stops: A tensor of shape `[B, 2]` containing the stop coordinates of the
-        grid.
-      nums: A tuple of the form `[w,h]` containing the number of points in each
-        dimension. Must be known at compile time.
-      name: A name for this op that defaults to "grid_generate".
-
-    Returns:
-      A tensor of shape `[B, w, h, 2]` containing the 2D grid. starts and ends are inclusive. The last dimension contains the x and y coordinates of the grid points.
-    """
-    with tf.compat.v1.name_scope(name):
-        # shape (B,2)
-        starts = tf.convert_to_tensor(starts)
-        # shape (B,2)
-        stops = tf.convert_to_tensor(stops)
-        # shape (B,w)
-        w_range = tf.linspace(starts[:, 0], stops[:, 0], nums[0], axis=1)
-
-        # shape (B,w)
-        second_spacial_dim_start = tf.einsum(
-            'i,j->ij', starts[:, 1], tf.ones((nums[0],)))
-        # shape (B,w,2)
-        lower_stacked = tf.stack([w_range, second_spacial_dim_start], axis=2)
-        # shape (B,w)
-        second_spacial_dim_end = tf.einsum(
-            'i,j->ij', stops[:, 1], tf.ones((nums[0],)))
-        # shape (B,w,2)
-        upper_stacked = tf.stack([w_range, second_spacial_dim_end], axis=2)
-
-        # liat of tensors with shape (B,w,2) of length h
-        ranges = [(1.0-alpha)*lower_stacked+alpha *
-                  upper_stacked for alpha in [i/(nums[1]-1) for i in range(nums[1])]]
-        # shape (B,w,h,2)
-        stacked = tf.stack(ranges, axis=2)
-        return stacked
