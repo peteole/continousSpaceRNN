@@ -25,7 +25,8 @@ class ImageInterpolator(tf.keras.layers.Layer):
         starts = section[:, :2]
         #print("starts", starts)
         stops = section[:, :2] + section[:, 2:]
-        w_range = tf.linspace(starts[:, 0], stops[:, 0], self.grid_dim[0], axis=1)
+        w_range = tf.linspace(
+            starts[:, 0], stops[:, 0], self.grid_dim[0], axis=1)
 
         # shape (B,w)
         second_spacial_dim_start = tf.einsum(
@@ -43,7 +44,7 @@ class ImageInterpolator(tf.keras.layers.Layer):
                 upper_stacked for alpha in [i/(self.grid_dim[1]-1) for i in range(self.grid_dim[1])]]
         interpolations = [tfp.math.batch_interp_regular_nd_grid(
             line, [0.0, 0.0], [1.0, 1.0], image, axis=1) for line in grid]
-        stacked= tf.stack(interpolations, axis=2)
+        stacked = tf.stack(interpolations, axis=2)
         return stacked
 
     # def call(self, image, section):
@@ -105,10 +106,10 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
         #     raise ValueError("section_values has wrong shape")
         #print("section_values: ", section_values)
         processed_section_values = self.section_processor(section_values)
-        #print("processed_section_values: ", processed_section_values)
+        # print("processed_section_values: ", processed_section_values)
         lstm_out, lstm_states = self.lstm_cell(
             processed_section_values, last_lstm_states)
-        #print("lstm_out: ", lstm_out)
+        # print("lstm_out: ", lstm_out)
         next_section_command = self.next_section_command_computer(lstm_out)
         #print("next_section_command: ", next_section_command)
         return lstm_out, (lstm_states, next_section_command)
@@ -116,9 +117,9 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
     def get_initial_state(self, inputs=None, batch_size=None, dtype=None):
         lstm_state = self.lstm_cell.get_initial_state(
             inputs, batch_size, dtype)
-        print("LSTM state: ", lstm_state)
+        #print("LSTM state: ", lstm_state)
         section_state = tf.repeat([[0.0, 0.0, 1.0]], batch_size, axis=0)
-        print("section_state: ", section_state)
+        #print("section_state: ", section_state)
         # stacked= tf.stack([lstm_state, section_state], axis=0)
         # print("stacked: ",stacked)
         return [lstm_state, section_state]
