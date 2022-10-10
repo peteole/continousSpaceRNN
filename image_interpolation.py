@@ -23,7 +23,7 @@ class ImageInterpolator(tf.keras.layers.Layer):
 
     def call(self, image, section):
         starts = section[:, :2]
-        #print("starts", starts)
+        # print("starts", starts)
         stops = section[:, :2] + section[:, 2:]
         w_range = tf.linspace(
             starts[:, 0], stops[:, 0], self.grid_dim[0], axis=1, name="batched_x_grid")
@@ -59,44 +59,47 @@ class ImageSectionRNNCell(tf.keras.layers.Layer):
     Args:
         grid_dim: The dimension of the grid to interpolate the image to
         units: The number of units in the LSTM cell
+        section_processor: A keras layer that takes a section of the image and returns a vector of length units
+        next_section_command_computer: A keras layer that takes the output of the LSTM cell and returns a (batched) vector of length 3 containing the location of the section the network wants to look at next in the format (x, y, scale)
+
         Call arguments:
             image: A 4D tensor of shape (batch_size, height, width, channels)
             state_t: A tuple of the previous state of the RNN. The first element is the lstm states for all batches and the second element is the sections the network wants us to have a look at in this iteration (for all batches).
     """
 
-    def __init__(self, grid_dim: Tuple = (16, 16), units=32, **kwargs):
+    def __init__(self, grid_dim: Tuple = (16, 16), units=32, section_processor=None, next_section_command_computer=None, **kwargs):
         super(ImageSectionRNNCell, self).__init__(**kwargs)
         self.units = units
         self.grid_dim = grid_dim
         self.interpolator = ImageInterpolator(grid_dim=self.grid_dim)
-        self.section_processor = tf.keras.Sequential([
-            layers.Conv2D(3, 3, activation='relu'),
-            layers.Conv2D(3, 3, activation='relu'),
-            layers.Flatten(),
-            layers.Dense(units, activation='relu')
+        self.section_processor = section_processor if section_processor else tf.keras.Sequential([
+            tf.keras.layers.Conv2D(16, 3, activation='relu', padding="same"),
+            tf.keras.layers.MaxPool2D(),
+            tf.keras.layers.Conv2D(32, 3, activation='relu', padding="same"),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(32, activation='relu'),
+            tf.keras.layers.Dense(32, activation='relu')
         ])
         self.lstm_cell = tf.keras.layers.LSTMCell(units)
-        self.next_section_command_computer = tf.keras.Sequential([
+        self.next_section_command_computer = next_section_command_computer if next_section_command_computer else tf.keras.Sequential([
+            layers.Dense(units, activation='relu'),
             layers.Dense(units, activation='relu'),
             layers.Dense(3, activation='sigmoid')
         ])
         self.state_size = (self.lstm_cell.state_size, 3)
 
     def call(self, image, state_t):
-        #print("state_t: ", state_t)
+        # print("state_t: ", state_t)
         (last_lstm_states, section_commands) = state_t
         section_values = self.interpolator(image, section_commands)
-        # if len(section_values.shape) == 3 or section_values.shape[-1] == 1:
-        #     #section_values = tf.expand_dims(section_values, -1)
-        #     raise ValueError("section_values has wrong shape")
-        #print("section_values: ", section_values)
+        # print("section_values: ", section_values)
         processed_section_values = self.section_processor(section_values)
         # print("processed_section_values: ", processed_section_values)
         lstm_out, lstm_states = self.lstm_cell(
             processed_section_values, last_lstm_states)
         # print("lstm_out: ", lstm_out)
         next_section_command = self.next_section_command_computer(lstm_out)
-        #print("next_section_command: ", next_section_command)
+        # print("next_section_command: ", next_section_command)
         return lstm_out, (lstm_states, next_section_command)
 
     def get_config(self):
